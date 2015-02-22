@@ -55,7 +55,7 @@ function extractWebsiteLinks(window) {
   var aElements = document.querySelectorAll('table.images_table>tbody>tr>td>a');
   var links = Array.prototype.map.call(aElements, function(a) {
     var href = a.href;
-    var m = href.match(/^.*url\?q=(.*)/);
+    var m = href.match(/^.*url\?q=([^&]*)/);
     if (m) return m[1];
     return null;
   });
@@ -76,16 +76,17 @@ function scrapeWebsiteForImageLinks(keyword) {
             fuzzyMatch(img.title, keyword) ||
             fuzzyMatch(img.src, keyword);
         });
-        return imgs.map(function(img) { return img.src; });
+        return imgs.map(function(img) {
+          return img.src.replace(/file:\/+/, 'http://');
+        });
       });
   };
 }
 // TODO: integrate http://glench.github.io/fuzzyset.js/ maybe?
 function fuzzyMatch(inputStr, keyword) {
-  return true;
   var words = keyword.split(' ');
   return words.some(function(word) {
-    var p = new RegExp(word);
+    var p = new RegExp(word, 'i');
     return p.test(inputStr);
   });
 }
@@ -103,7 +104,7 @@ function iterToStream(iter) {
 
 if (!module.parent) {
 
-  getHTMLStreams('ellie goulding', 20)
+  getHTMLStreams('ellie goulding', 2)
     // .head()
     // .flatten()
     .through(htmlParser)
