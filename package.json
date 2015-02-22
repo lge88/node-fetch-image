@@ -1,0 +1,21 @@
+{
+  "name": "expt-image-layout",
+  "version": "1.0.0",
+  "description": "",
+  "main": "process-data.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "glob": "^4.4.0",
+    "glob-stream": "^4.0.1",
+    "googleapis": "^1.1.3",
+    "highland": "^2.4.0",
+    "jsdom": "^3.1.1",
+    "lodash": "^3.2.0",
+    "object-assign": "^2.0.0",
+    "request": "^2.53.0"
+  }
+}
