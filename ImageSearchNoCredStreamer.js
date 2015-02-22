@@ -104,14 +104,15 @@ function iterToStream(iter) {
 
 if (!module.parent) {
 
-  getHTMLStreams('ellie goulding', 2)
+  getHTMLStreams('ellie goulding', 200)
     // .head()
     // .flatten()
     .through(htmlParser)
     .map(extractWebsiteLinks)
     .flatten()
-    // .parallel(10)
     .map(scrapeWebsiteForImageLinks('ellie goulding'))
+  // FIXME: parallel will cause error at the end.
+  // .parallel(10)
     .flatten()
     .each(_.log);
 }
