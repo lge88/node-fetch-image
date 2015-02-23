@@ -41,11 +41,14 @@ function imageSearchUrlStream(keyword, num) {
 }
 exports.imageSearchUrlStream = imageSearchUrlStream;
 
+function parseHTML(s) {
+  return s.invoke('toString').through(htmlParser);
+}
+
 function siteLinkStream(urlStream) {
   return fetch(urlStream)
+    .map(parseHTML)
     .parallel(10)
-    .invoke('toString')
-    .through(htmlParser)
     .map(extractSiteLinks)
     .flatten();
 }
@@ -60,37 +63,37 @@ function extractSiteLinks(window) {
     if (m) return m[1];
     return null;
   });
-  return links.filter(function(x) { return x !== null; });
+  return _(links).filter(function(x) { return x !== null; });
 }
 
-var req = require('request');
 function imageLinkStream(urlStream, keyword) {
   return fetch(urlStream)
-  // TODO: make it pretty
+    .map(parseHTML)
     .map(function(s) {
-      return s.invoke('toString')
-        .through(htmlParser)
-        .map(extractImageLinks(keyword));
+      return s.map(extramImageInfo(keyword));
     })
     .parallel(10)
     .flatten();
 }
 exports.imageLinkStream = imageLinkStream;
 
-function extractImageLinks(keyword) {
+function extramImageInfo(keyword) {
   return function(window) {
     var document = window.document;
-    var imgs = document.querySelectorAll('img');
-    imgs = Array.prototype.filter.call(imgs, function(img) {
-      return fuzzyMatch(img.alt, keyword) ||
-        fuzzyMatch(img.title, keyword) ||
-        fuzzyMatch(img.src, keyword);
-    });
+    return _(Array.prototype.filter.call(
+      document.querySelectorAll('img'),
+      function(img) {
+        return fuzzyMatch(img.alt, keyword) ||
+          fuzzyMatch(img.title, keyword) ||
+          fuzzyMatch(img.src, keyword);
+      }))
+      .filter(function(img) { return !!(img.src); })
+      .map(function(img) {
+        var url = img.src.replace(/file:\/+/, 'http://');
+        return url;
+        // return { url: url };
+      });
 
-    var links =  imgs.map(function(img) {
-      return img.src.replace(/file:\/+/, 'http://');
-    }).filter(function(x) { return !!x; });
-    return links;
   };
 }
 
@@ -103,39 +106,19 @@ function fuzzyMatch(inputStr, keyword) {
   });
 }
 
+function downloadImageStream(dest) {
+  return function(imageInfoStream) {
+
+  };
+}
+
 if (!module.parent) {
+  var noop = function() {};
   var keyword = 'ellie goulding';
   var searchUrlStream = imageSearchUrlStream(keyword, 33);
   var siteUrlStream = siteLinkStream(searchUrlStream);
-
-  // var u = 'http://en.wikipedia.org/wiki/Ellie_Goulding';
-  // siteUrlStream.toArray(function(arr) {
-  //   console.log("arr = ", arr);
-  //   var imageUrlStream = imageLinkStream(arr, keyword)
-  //         .errors(noop)
-  //         .each(_.log);
-  // });
-
-  var noop = function() {};
-
   var imageUrlStream = imageLinkStream(siteUrlStream, keyword)
         .errors(noop)
         .take(100)
         .each(_.log);
-
-  // searchUrlStream.observe().append('').tap(_.log);
-  // siteUrlStream.observe().append('').tap(_.log);
-  // siteUrlStream.observe().tap(_.log);
-  // searchUrlStream
-  //   .concat([''])
-  //   .concat(siteLinkStream)
-  //   // .concat([''])
-  //   // .concat(imageUrlStream)
-  //   .each(_.log);
-
-  // siteUrlStream.each(_.log);
-  // imageUrlStream
-    // .errors(noop)
-    // .each(_.log);
-
 }

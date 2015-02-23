@@ -31,7 +31,6 @@ if (!module.parent) {
     .through(htmlParser)
     .each(function(window) {
       var document = window.document;
-      // console.log("window = ", window);
       console.log("title = ", document.title);
     });
 }

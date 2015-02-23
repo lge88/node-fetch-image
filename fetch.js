@@ -2,15 +2,9 @@ var _ = require('highland');
 var req = require('request');
 
 // Input a stream of url strings
-// Output a stream of byte streams that fetches from the url.
-function urlToBytes(url) {
-  return _(req(url));
-}
-
-function fetch(urls, options) {
-  var urlStream = _(urls);
-  return urlStream.map(urlToBytes);
-};
+// Output a stream of byte streams that fetched from the url.
+function fetch(urls) { return _(urls).map(urlToBytes); };
+function urlToBytes(url) { return _(req(url)); }
 
 if (!module.parent) {
   var urls = [
