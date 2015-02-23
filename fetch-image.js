@@ -2,7 +2,6 @@ var querystring = require('querystring');
 var _ = require('highland');
 var req = require('request');
 var assign = require('object-assign');
-var fetch = require('./fetch');
 var htmlParser = require('./htmlParser');
 var mkdirp = require('mkdirp');
 var path = require('path');
@@ -180,6 +179,11 @@ function downloadImagesTo(destDirectory, prefix) {
   };
 }
 exports.downloadImagesTo = downloadImagesTo;
+
+function fetch(urls) { return _(urls).map(byteStreamFromUrl); }
+
+function byteStreamFromUrl(url) { return _(req(url)); }
+
 
 if (!module.parent) {
   var noop = function() {};

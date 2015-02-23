@@ -1,10 +1,9 @@
 #! /usr/bin/env node
 var assign = require('object-assign');
-var sim = require(__dirname + '/../search-image');
+var sim = require(__dirname + '/../fetch-image');
 var minimist = require('minimist');
 var argv = minimist(process.argv.slice(2));
 var config = parseArgv(argv);
-// console.log("config = ", config); process.exit();
 
 if (config === null) {
   printHelpAndExit();
