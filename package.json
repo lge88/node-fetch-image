@@ -1,10 +1,10 @@
 {
   "name": "fetch-image",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "fetch-image.js",
   "bin": {
-    "sim": "bin/fim"
+    "fim": "bin/fim"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
