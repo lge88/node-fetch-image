@@ -1,10 +1,14 @@
-// https://www.google.com/search?q=ellie+goulding&start=100&tbm=isch
 var querystring = require('querystring');
 var _ = require('highland');
 var assign = require('object-assign');
 var fetch = require('./fetch');
 var htmlParser = require('./htmlParser');
+var mkdirp = require('mkdirp');
+var path = require('path');
+var fs = require('fs');
+var url = require('url');
 
+// https://www.google.com/search?q=ellie+goulding&start=100&num=20&tbm=isch
 var ENDPOINT = 'https://www.google.com/search?';
 var RESULT_PER_PAGE = 20;
 var DEFAULT_PARAMS = {
@@ -67,33 +71,61 @@ function extractSiteLinks(window) {
 }
 
 function imageLinkStream(urlStream, keyword) {
-  return fetch(urlStream)
+  var bytes = fetch(urlStream);
+  // var urlCopy = urlStream.observe();
+  // bytes.zip(urlCopy)
+  //   .map(function(tuple) {
+
+  //   });
+
+  return bytes
     .map(parseHTML)
-    .map(function(s) {
-      return s.map(extramImageInfo(keyword));
-    })
+    .map(function(s) { return s.map(extramImageInfo(keyword)); })
     .parallel(10)
     .flatten();
 }
 exports.imageLinkStream = imageLinkStream;
 
+function resolveUrl(from, to) {
+  return url.resolve(from, to);
+}
+
+var RE_IMAGE_URL = /(\.jpeg|\.png|\.jpg)$/;
+function isImageUrl(url) {
+  return RE_IMAGE_URL.test(url);
+}
+
 function extramImageInfo(keyword) {
   return function(window) {
     var document = window.document;
-    return _(Array.prototype.filter.call(
-      document.querySelectorAll('img'),
-      function(img) {
+
+    return _(Array.prototype.slice.call(document.querySelectorAll('img')))
+      .filter(function(img) {
         return fuzzyMatch(img.alt, keyword) ||
           fuzzyMatch(img.title, keyword) ||
           fuzzyMatch(img.src, keyword);
-      }))
-      .filter(function(img) { return !!(img.src); })
+      })
       .map(function(img) {
-        var url = img.src.replace(/file:\/+/, 'http://');
-        return url;
-        // return { url: url };
-      });
+        var links = [ img.src ];
+        // TODO: location.href is not working, need ways to pass the url info down.
+        // var pageUrl = window.location.href;
+        var pageUrl = '';
+        // Use image element as link to full size image.
+        // TODO: The search algorithm needs to be improved. bfs/dfs maybe.
+        if (img.parentNode && img.parentNode.href) {
+          links.push(resolveUrl(pageUrl, img.parentNode.href));
+        }
 
+        links = links.filter(isImageUrl);
+        var imageInfo = { img: img, links: links };
+        return imageInfo;
+      })
+      .map(function(imageInfo) { return imageInfo.links; })
+      .map(function(links) {
+        return links.map(function(url) {
+          return url.replace(/file:\/+/, 'http://');
+        });
+      });
   };
 }
 
@@ -106,9 +138,36 @@ function fuzzyMatch(inputStr, keyword) {
   });
 }
 
-function downloadImageStream(dest) {
-  return function(imageInfoStream) {
+var req = require('request');
+function downloadImagesTo(destDirectory, prefix) {
+  // TODO validate destDirectory;
+  var i = 0;
+  return function(url) {
+    var ext = path.extname(url) || '';
+    var dest = path.join(destDirectory, prefix + (i++) + ext);
 
+    mkdirp(destDirectory, function (err) {
+      if (err)
+        console.error(err);
+      else {
+        var byteStream = req(url);
+
+        byteStream.on('response', function() {
+          var to = fs.createWriteStream(dest);
+          byteStream.pipe(to);
+        });
+
+        byteStream.on('error', function(err) {
+          // TODO: clean up error
+          console.log("dest = ", dest);
+          console.log("err = ", err);
+          byteStream.destroy();
+        });
+
+      }
+    });
+
+    return { url: url, dest: dest };
   };
 }
 
@@ -119,6 +178,10 @@ if (!module.parent) {
   var siteUrlStream = siteLinkStream(searchUrlStream);
   var imageUrlStream = imageLinkStream(siteUrlStream, keyword)
         .errors(noop)
-        .take(100)
-        .each(_.log);
+        .take(100);
+
+  // imageUrlStream.each(_.log);
+  imageUrlStream
+    .map(downloadImagesTo('./output/ellie-images', 'ellie-goulding-'))
+    .each(_.log);
 }
