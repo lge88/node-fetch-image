@@ -1,0 +1,54 @@
+#! /usr/bin/env node
+var assign = require('object-assign');
+var sim = require(__dirname + '/../search-image');
+var noop = function() {};
+
+var DEFAULT_OPTIONS = {
+  numGoogleResults: 100,
+  numImages: 100,
+  destDirectory: 'output',
+  prefix: '',
+  verbose: false
+};
+
+function run(keyword, options) {
+  var opt = assign({}, DEFAULT_OPTIONS, options);
+
+  var searchUrlStream = sim.imageSearchUrlStream(keyword, opt.numGoogleResults);
+  var siteUrlStream = sim.siteLinkStream(searchUrlStream);
+  var imageUrlStream = sim.imageLinkStream(siteUrlStream, keyword);
+
+  imageUrlStream
+    .errors(noop)
+    .take(opt.numImages)
+    .map(sim.downloadImagesTo(opt.destDirectory, opt.prefix))
+    .each(function(obj) {
+      console.log('\'' + obj.url + '\' \'' + obj.dest + '\'');
+    });
+}
+
+function parseArgs(argv) {
+  if (!argv[2]) return null;
+
+  var args = {
+    keyword: argv[2],
+    options: {
+      destDirectory: argv[3]
+    }
+  };
+  return args;
+}
+
+function printHelpAndExit() {
+  // TODO: parse options
+  // console.log('Usage: sim <keyword> <destination direction> [options]');
+  console.log('Usage: sim <keyword> <destination direction>');
+  process.exit();
+}
+
+var args = parseArgs(process.argv);
+if (args !== null) {
+  run(args.keyword, args.options);
+} else {
+  printHelpAndExit();
+}

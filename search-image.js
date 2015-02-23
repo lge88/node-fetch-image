@@ -1,5 +1,6 @@
 var querystring = require('querystring');
 var _ = require('highland');
+var req = require('request');
 var assign = require('object-assign');
 var fetch = require('./fetch');
 var htmlParser = require('./htmlParser');
@@ -138,7 +139,6 @@ function fuzzyMatch(inputStr, keyword) {
   });
 }
 
-var req = require('request');
 function downloadImagesTo(destDirectory, prefix) {
   // TODO validate destDirectory;
   var i = 0;
@@ -159,8 +159,8 @@ function downloadImagesTo(destDirectory, prefix) {
 
         byteStream.on('error', function(err) {
           // TODO: clean up error
-          console.log("dest = ", dest);
-          console.log("err = ", err);
+          // console.log("dest = ", dest);
+          // console.log("err = ", err);
           byteStream.destroy();
         });
 
@@ -170,6 +170,7 @@ function downloadImagesTo(destDirectory, prefix) {
     return { url: url, dest: dest };
   };
 }
+exports.downloadImagesTo = downloadImagesTo;
 
 if (!module.parent) {
   var noop = function() {};

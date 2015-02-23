@@ -2,7 +2,10 @@
   "name": "search-image",
   "version": "1.0.0",
   "description": "",
-  "main": "google-search-image.js",
+  "main": "search-image.js",
+  "bin": {
+    "sim": "bin/sim.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
