@@ -96,6 +96,11 @@ function isImageUrl(url) {
   return RE_IMAGE_URL.test(url);
 }
 
+var RE_MISSING_IMAGE_URL = /missing-image/;
+function isNotMissing(url) {
+  return !RE_MISSING_IMAGE_URL.test(url);
+}
+
 function extramImageInfo(keyword) {
   return function(window) {
     var document = window.document;
@@ -117,7 +122,10 @@ function extramImageInfo(keyword) {
           links.push(resolveUrl(pageUrl, img.parentNode.href));
         }
 
-        links = links.filter(isImageUrl);
+        links = links
+          .filter(isImageUrl)
+          .filter(isNotMissing);
+
         var imageInfo = { img: img, links: links };
         return imageInfo;
       })
@@ -139,6 +147,7 @@ function fuzzyMatch(inputStr, keyword) {
   });
 }
 
+// TODO: make this return a stream.
 function downloadImagesTo(destDirectory, prefix) {
   // TODO validate destDirectory;
   var i = 0;
