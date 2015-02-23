@@ -1,54 +1,81 @@
 #! /usr/bin/env node
 var assign = require('object-assign');
 var sim = require(__dirname + '/../search-image');
-var noop = function() {};
+var minimist = require('minimist');
+var argv = minimist(process.argv.slice(2));
+var config = parseArgv(argv);
+// console.log("config = ", config); process.exit();
 
-var DEFAULT_OPTIONS = {
-  numGoogleResults: 100,
-  numImages: 100,
-  destDirectory: 'output',
-  prefix: '',
-  verbose: false
-};
+if (config === null) {
+  printHelpAndExit();
+} else {
+  run(config);
+}
 
-function run(keyword, options) {
-  var opt = assign({}, DEFAULT_OPTIONS, options);
+function defaultConfig() {
+  return {
+    numGoogleResults: 100,
+    numImages: 100,
+    destDirectory: 'output',
+    prefix: '',
+    verbose: false
+  };
+}
 
-  var searchUrlStream = sim.imageSearchUrlStream(keyword, opt.numGoogleResults);
+function parseArgv(argv) {
+  var defConfig = defaultConfig();
+  var config = {};
+  if (argv._.length <= 0) return null;
+
+  config.keyword = argv._[0];
+
+  config.destDirectory = argv.d || argv['directory'];
+  config.prefix = argv.p || argv['prefix'];
+  if (!config.prefix) delete config.prefix;
+
+  config.numGoogleResults = parseInt(argv['num-google-results']);
+  if (isNaN(config.numGoogleResults)) delete config.numGoogleResults;
+
+  config.numImages = parseInt(argv.n || argv['num-images']);
+  if (isNaN(config.numImages)) delete config.numImages;
+
+  config = assign(defConfig, config);
+  return config;
+}
+
+
+function noop() {}
+
+function run(config) {
+  var searchUrlStream = sim.imageSearchUrlStream(config.keyword, config.numGoogleResults);
   var siteUrlStream = sim.siteLinkStream(searchUrlStream);
-  var imageUrlStream = sim.imageLinkStream(siteUrlStream, keyword);
+  var imageUrlStream = sim.imageLinkStream(siteUrlStream, config.keyword);
 
-  imageUrlStream
+  imageUrlStream = imageUrlStream
     .errors(noop)
-    .take(opt.numImages)
-    .map(sim.downloadImagesTo(opt.destDirectory, opt.prefix))
+    .take(config.numImages);
+
+  if (config.destDirectory) {
+    imageUrlStream.map(sim.downloadImagesTo(config.destDirectory, config.prefix))
     .each(function(obj) {
       console.log('\'' + obj.url + '\' \'' + obj.dest + '\'');
     });
-}
-
-function parseArgs(argv) {
-  if (!argv[2]) return null;
-
-  var args = {
-    keyword: argv[2],
-    options: {
-      destDirectory: argv[3]
-    }
-  };
-  return args;
+  } else {
+    imageUrlStream.each(function(url) {
+      console.log(url);
+    });
+  }
 }
 
 function printHelpAndExit() {
-  // TODO: parse options
-  // console.log('Usage: sim <keyword> <destination direction> [options]');
-  console.log('Usage: sim <keyword> <destination direction>');
-  process.exit();
-}
+  console.log('Fetch images from web.');
+  console.log('Usage: sim <keyword> [options]');
+  console.log('  -d, --directory             output directory, default is \'\'. If empty, ' +
+              'ouput image links instead of download.');
+  console.log('  -n, --num-images            number of images to download, default is 100.');
+  console.log('  -p, --prefix                file prefix, default is \'\'');
+  console.log('  --num-google-results        number of google search image results to start' +
+              ', default is 100.');
 
-var args = parseArgs(process.argv);
-if (args !== null) {
-  run(args.keyword, args.options);
-} else {
-  printHelpAndExit();
+  process.exit();
 }
