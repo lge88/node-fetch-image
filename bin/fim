@@ -68,7 +68,7 @@ function run(config) {
 
 function printHelpAndExit() {
   console.log('Fetch images from web.');
-  console.log('Usage: sim <keyword> [options]');
+  console.log('Usage: fim <keyword> [options]');
   console.log('  -d, --directory             output directory, default is \'\'. If empty, ' +
               'ouput image links instead of download.');
   console.log('  -n, --num-images            number of images to download, default is 100.');
