@@ -8,8 +8,24 @@ var path = require('path');
 var fs = require('fs');
 var url = require('url');
 
-// HighlandStream.drop hack
+// HighlandStream extensions:
 var HighlandStream = _().constructor;
+HighlandStream.prototype.filterAsync = function (f) {
+  return this.consume(function(err, x, push, next) {
+    if (err) {
+      push(err);
+      next();
+    } else if (x === _.nil) {
+      push(null, _.nil);
+    } else {
+      next();
+      f(x, function(ok) {
+        if (ok) push(null ,x);
+      });
+    }
+  });
+};
+
 HighlandStream.prototype.drop = function (n) {
   if (n === 0) {
     return _([]);
@@ -21,11 +37,11 @@ HighlandStream.prototype.drop = function (n) {
         next();
       }
       else {
-        push(null, nil);
+        push(null, _.nil);
       }
     }
-    else if (x === nil) {
-      push(null, nil);
+    else if (x === _.nil) {
+      push(null, _.nil);
     }
     else {
       n--;
@@ -187,6 +203,7 @@ function downloadImagesTo(destDirectory, prefix) {
     var ext = path.extname(url) || '';
     var dest = path.join(destDirectory, prefix + (i++) + ext);
 
+    // TODO: mkdirp should not be here, put it into bin/
     mkdirp(destDirectory, function (err) {
       if (err)
         console.error(err);
