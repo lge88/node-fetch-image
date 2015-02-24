@@ -110,6 +110,7 @@ function urlToWindowStream(url) {
 }
 exports.urlToWindowStream = urlToWindowStream;
 
+// TODO: make this a member of ImageFetcher instance.
 exports.numParTasks = 8;
 
 function siteLinkStream(urlStream) {
@@ -139,7 +140,7 @@ function imageLinkStream(urlStream, keyword) {
   return urlStream
     .map(urlToWindowStream)
     .parallel(exports.numParTasks)
-    .map(extramImageInfo(keyword))
+    .map(scrapeForImageLinks(keyword))
     .flatten();
 }
 exports.imageLinkStream = imageLinkStream;
@@ -154,32 +155,32 @@ function isNotMissing(url) {
   return !RE_MISSING_IMAGE_URL.test(url);
 }
 
-function extramImageInfo(keyword) {
+function scrapeForImageLinks(keyword) {
   return function(window) {
     var document = window.document;
 
     var links = _(Array.prototype.slice.call(document.querySelectorAll('img')))
-      .filter(function(img) {
-        return fuzzyMatch(img.alt, keyword) ||
-          fuzzyMatch(img.title, keyword) ||
-          fuzzyMatch(img.src, keyword);
-      })
-      .map(function(img) {
-        var links = [ img.src ];
-        // Use image element as link to full size image.
-        // TODO: It would nice if the search algorithm go some level deeper.
-        if (img.parentNode && img.parentNode.href) {
-          links.push(img.parentNode.href);
-        }
+          .filter(function(img) {
+            return fuzzyMatch(img.alt, keyword) ||
+              fuzzyMatch(img.title, keyword) ||
+              fuzzyMatch(img.src, keyword);
+          })
+          .map(function(img) {
+            var links = [ img.src ];
+            // Use image element as link to full size image.
+            // TODO: It would nice if the search algorithm go some level deeper.
+            if (img.parentNode && img.parentNode.href) {
+              links.push(img.parentNode.href);
+            }
 
-        links = links
-          .filter(isImageUrl)
-          .filter(isNotMissing);
+            links = links
+              .filter(isImageUrl)
+              .filter(isNotMissing);
 
-        var imageInfo = { img: img, links: links };
-        return imageInfo;
-      })
-      .map(function(imageInfo) { return imageInfo.links; });
+            var imageInfo = { img: img, links: links };
+            return imageInfo;
+          })
+          .map(function(imageInfo) { return imageInfo.links; });
 
     window.close();
     return links;
@@ -234,9 +235,48 @@ function downloadImagesTo(destDirectory, prefix) {
 }
 exports.downloadImagesTo = downloadImagesTo;
 
+var noop = function() {};
+function run(config) {
+  var searchUrlStream = imageSearchUrlStream(config.keyword, config.numGoogleResults);
+  var siteUrlStream = siteLinkStream(searchUrlStream);
+  var outputStream = imageLinkStream(siteUrlStream, config.keyword);
+
+  // TODO: if config.verbose print the error to stderr
+  outputStream = outputStream.errors(noop);
+
+  if (config.destDirectory) {
+    outputStream = outputStream
+    // Side effect:
+      .map(downloadImagesTo(config.destDirectory, config.prefix))
+      .map(function(obj) {
+        return obj.url + ' ' + obj.dest;
+      });
+  }
+
+  outputStream = outputStream.take(config.numImages);
+  return outputStream;
+}
+
+exports.run = run;
+
+// http://stackoverflow.com/questions/5717093/check-if-a-javascript-string-is-an-url
+function isValidUrl(str) {
+  var pattern = new RegExp('^(https?:\\/\\/)?'+ // protocol
+                           '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.)+[a-z]{2,}|'+ // domain name
+                           '((\\d{1,3}\\.){3}\\d{1,3}))'+ // OR ip (v4) address
+                           '(\\:\\d+)?(\\/[-a-z\\d%_.~+]*)*'+ // port and path
+                           '(\\?[;&a-z\\d%_.~+=-]*)?'+ // query string
+                           '(\\#[-a-z\\d_]*)?$','i'); // fragment locator
+  if(!pattern.test(str)) {
+    return false;
+  } else {
+    return true;
+  }
+}
+exports.isValidUrl = isValidUrl;
+
 if (!module.parent) {
   exports.numParTasks = 8;
-  var noop = function() {};
   var keyword = 'ellie goulding';
   var searchUrlStream = imageSearchUrlStream(keyword, 53);
   var siteUrlStream = siteLinkStream(searchUrlStream);

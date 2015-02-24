@@ -1,6 +1,7 @@
 #! /usr/bin/env node
 var assign = require('object-assign');
 var sim = require(__dirname + '/../fetch-image');
+var run = sim.run;
 var minimist = require('minimist');
 var argv = minimist(process.argv.slice(2));
 var config = parseArgv(argv);
@@ -8,7 +9,9 @@ var config = parseArgv(argv);
 if (config === null) {
   printHelpAndExit();
 } else {
-  run(config);
+  run(config)
+    .map(function(x) { return x + '\n'; })
+    .pipe(process.stdout);
 }
 
 function defaultConfig() {
@@ -45,26 +48,6 @@ function parseArgv(argv) {
 
 function noop() {}
 
-function run(config) {
-  var searchUrlStream = sim.imageSearchUrlStream(config.keyword, config.numGoogleResults);
-  var siteUrlStream = sim.siteLinkStream(searchUrlStream);
-  var imageUrlStream = sim.imageLinkStream(siteUrlStream, config.keyword);
-
-  imageUrlStream = imageUrlStream
-    .errors(noop)
-    .take(config.numImages);
-
-  if (config.destDirectory) {
-    imageUrlStream.map(sim.downloadImagesTo(config.destDirectory, config.prefix))
-    .each(function(obj) {
-      console.log('\'' + obj.url + '\' \'' + obj.dest + '\'');
-    });
-  } else {
-    imageUrlStream.each(function(url) {
-      console.log(url);
-    });
-  }
-}
 
 function printHelpAndExit() {
   console.log('Fetch images from web.');
