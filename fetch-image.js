@@ -1,12 +1,42 @@
 var querystring = require('querystring');
 var _ = require('highland');
 var req = require('request');
+var jsdom = require('jsdom');
 var assign = require('object-assign');
-var htmlParser = require('./htmlParser');
 var mkdirp = require('mkdirp');
 var path = require('path');
 var fs = require('fs');
 var url = require('url');
+
+// HighlandStream.drop hack
+var HighlandStream = _().constructor;
+HighlandStream.prototype.drop = function (n) {
+  if (n === 0) {
+    return _([]);
+  }
+  return this.consume(function (err, x, push, next) {
+    if (err) {
+      push(err);
+      if (n < 0) {
+        next();
+      }
+      else {
+        push(null, nil);
+      }
+    }
+    else if (x === nil) {
+      push(null, nil);
+    }
+    else {
+      n--;
+      if (n < 0) {
+        push(null, x);
+      }
+
+      next();
+    }
+  });
+};
 
 // https://www.google.com/search?q=ellie+goulding&start=100&num=20&tbm=isch
 var ENDPOINT = 'https://www.google.com/search?';
@@ -45,14 +75,31 @@ function imageSearchUrlStream(keyword, num) {
 }
 exports.imageSearchUrlStream = imageSearchUrlStream;
 
-function parseHTML(s) {
-  return s.invoke('toString').through(htmlParser);
+// map a url string to a stream of window objects (parsed HTML).
+function urlToWindowStream(url) {
+  return _(function(push, next) {
+    try {
+      jsdom.env({
+        url: url,
+        done: function(errors, window) {
+          push(errors, window);
+          push(null, _.nil);
+        }
+      });
+    } catch(err) {
+      push(err);
+      push(null, _.nil);
+    }
+  });
 }
+exports.urlToWindowStream = urlToWindowStream;
+
+exports.numParTasks = 8;
 
 function siteLinkStream(urlStream) {
-  return fetch(urlStream)
-    .map(parseHTML)
-    .parallel(10)
+  return urlStream
+    .map(urlToWindowStream)
+    .parallel(exports.numParTasks)
     .map(extractSiteLinks)
     .flatten();
 }
@@ -67,28 +114,19 @@ function extractSiteLinks(window) {
     if (m) return m[1];
     return null;
   });
+
+  window.close();
   return _(links).filter(function(x) { return x !== null; });
 }
 
 function imageLinkStream(urlStream, keyword) {
-  var bytes = fetch(urlStream);
-  // var urlCopy = urlStream.observe();
-  // bytes.zip(urlCopy)
-  //   .map(function(tuple) {
-
-  //   });
-
-  return bytes
-    .map(parseHTML)
-    .map(function(s) { return s.map(extramImageInfo(keyword)); })
-    .parallel(10)
+  return urlStream
+    .map(urlToWindowStream)
+    .parallel(exports.numParTasks)
+    .map(extramImageInfo(keyword))
     .flatten();
 }
 exports.imageLinkStream = imageLinkStream;
-
-function resolveUrl(from, to) {
-  return url.resolve(from, to);
-}
 
 var RE_IMAGE_URL = /(\.jpeg|\.png|\.jpg)$/;
 function isImageUrl(url) {
@@ -104,7 +142,7 @@ function extramImageInfo(keyword) {
   return function(window) {
     var document = window.document;
 
-    return _(Array.prototype.slice.call(document.querySelectorAll('img')))
+    var links = _(Array.prototype.slice.call(document.querySelectorAll('img')))
       .filter(function(img) {
         return fuzzyMatch(img.alt, keyword) ||
           fuzzyMatch(img.title, keyword) ||
@@ -112,13 +150,10 @@ function extramImageInfo(keyword) {
       })
       .map(function(img) {
         var links = [ img.src ];
-        // TODO: location.href is not working, need ways to pass the url info down.
-        // var pageUrl = window.location.href;
-        var pageUrl = '';
         // Use image element as link to full size image.
-        // TODO: The search algorithm needs to be improved. bfs/dfs maybe.
+        // TODO: It would nice if the search algorithm go some level deeper.
         if (img.parentNode && img.parentNode.href) {
-          links.push(resolveUrl(pageUrl, img.parentNode.href));
+          links.push(img.parentNode.href);
         }
 
         links = links
@@ -128,12 +163,10 @@ function extramImageInfo(keyword) {
         var imageInfo = { img: img, links: links };
         return imageInfo;
       })
-      .map(function(imageInfo) { return imageInfo.links; })
-      .map(function(links) {
-        return links.map(function(url) {
-          return url.replace(/file:\/+/, 'http://');
-        });
-      });
+      .map(function(imageInfo) { return imageInfo.links; });
+
+    window.close();
+    return links;
   };
 }
 
@@ -146,7 +179,7 @@ function fuzzyMatch(inputStr, keyword) {
   });
 }
 
-// TODO: make this return a stream.
+// TODO: make this return a stream of byte streams.
 function downloadImagesTo(destDirectory, prefix) {
   // TODO validate destDirectory;
   var i = 0;
@@ -160,9 +193,13 @@ function downloadImagesTo(destDirectory, prefix) {
       else {
         var byteStream = req(url);
 
-        byteStream.on('response', function() {
-          var to = fs.createWriteStream(dest);
-          byteStream.pipe(to);
+        byteStream.on('response', function(resp) {
+          var statusCode = '' + resp.statusCode, to;
+          if (!/^4/.test(statusCode)) {
+            to = fs.createWriteStream(dest);
+            byteStream.pipe(to);
+          }
+          byteStream.destroy();
         });
 
         byteStream.on('error', function(err) {
@@ -180,22 +217,19 @@ function downloadImagesTo(destDirectory, prefix) {
 }
 exports.downloadImagesTo = downloadImagesTo;
 
-function fetch(urls) { return _(urls).map(byteStreamFromUrl); }
-
-function byteStreamFromUrl(url) { return _(req(url)); }
-
-
 if (!module.parent) {
+  exports.numParTasks = 8;
   var noop = function() {};
   var keyword = 'ellie goulding';
-  var searchUrlStream = imageSearchUrlStream(keyword, 33);
+  var searchUrlStream = imageSearchUrlStream(keyword, 53);
   var siteUrlStream = siteLinkStream(searchUrlStream);
   var imageUrlStream = imageLinkStream(siteUrlStream, keyword)
         .errors(noop)
-        .take(100);
+        .take(200);
 
-  // imageUrlStream.each(_.log);
-  imageUrlStream
-    .map(downloadImagesTo('./output/ellie-images', 'ellie-goulding-'))
-    .each(_.log);
+  // siteUrlStream.each(_.log);
+  imageUrlStream.each(_.log);
+  // imageUrlStream
+  //   .map(downloadImagesTo('./output/ellie-images', 'ellie-goulding-'))
+  //   .each(_.log);
 }
